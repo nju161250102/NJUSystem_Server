@@ -3,11 +3,13 @@ from flask import Flask
 from flask import render_template
 from flask import request
 from login import loginModule
+from card import cardModule
 import requests
 import json
 
 app = Flask(__name__)
 app.register_blueprint(loginModule, url_prefix='/api/login/')
+app.register_blueprint(cardModule, url_prefix='/api/card/')
 
 
 @app.route('/')
