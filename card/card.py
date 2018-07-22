@@ -1,11 +1,9 @@
 # -*- coding:utf-8 -*-
 from flask import Blueprint
 from flask import request
-from flask import Response
 import requests
 import json
 import datetime
-import codecs
 from bs4 import BeautifulSoup
 
 cardModule = Blueprint('card', __name__)
@@ -41,9 +39,9 @@ def info():
 # 接口地址https://oa.nju.edu.cn/ecard/web/，访问速度很慢
 @cardModule.route('/record/', methods=['GET'])
 def oa_record():
-    # 获取请求中查询参数
-    start_date = request.args.get("from")
-    end_date = request.args.get("to")
+    # 获取请求中查询参数，并转换日期格式
+    start_date = request.args.get("from").replace("-", "/")
+    end_date = request.args.get("to").replace("-", "/")
     jar = requests.utils.cookiejar_from_dict(request.cookies)
 
     details = []
@@ -91,7 +89,8 @@ def oa_record():
                 income += float(item["amount"])
             details.append(item)
         # 检查是否还有剩余数据
-        page_flag = soup.find_all(name='td', attrs={"class": "text_brown", "align": "center"})[0].get_text(strip=True)
+        page_soup = soup.find_all(name='td', attrs={"class": "text_brown", "align": "center"})
+        page_flag = page_soup[0].get_text(strip=True)
         if page_flag.split('/')[0] == page_flag.split('/')[1]:
             break
         page_num += 1
@@ -102,6 +101,7 @@ def oa_record():
         "income": "%.2f" % income,
         "expense": "%.2f" % expense
     }, ensure_ascii=False)
+
 
 # 废弃接口, 因为仅能显示部分记录
 def record():

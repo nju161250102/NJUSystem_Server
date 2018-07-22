@@ -45,8 +45,8 @@
     https://oa.nju.edu.cn/ecard/web/学号/1  
     *http://mapp.nju.edu.cn/mobile/getTransList.mo*此接口未使用  
 * 查询参数  
-    from: [yyyy/MM/dd]开始时间  
-    to: [yyyy/MM/dd]结束时间  
+    from: [yyyy-MM-dd]开始时间  
+    to: [yyyy-MM-dd]结束时间  
     区间均包含两侧端点   
 * 返回参数  
     details: 条目细节  
