@@ -1,12 +1,61 @@
 # -*- coding:utf-8 -*-
 from flask import Blueprint
 from flask import request
+from flask import Response
 import requests
 import json
 import datetime
 from bs4 import BeautifulSoup
 
 cardModule = Blueprint('card', __name__)
+
+
+# 登录并从校园卡自助服务系统导入数据
+@cardModule.route('/import/', methods=['POST'])
+def import_data():
+    req_data = json.loads(request.data)
+    post_data = {
+        "IDToken1": req_data["name"],
+        "IDToken2": req_data["password"],
+        "inputCode": req_data["code"],
+        "encoded": "false"
+    }
+    # 注入验证码对应的cookie
+    jar = requests.utils.cookiejar_from_dict(request.cookies)
+    # 禁止重定向以获得登录的cookie
+    login_req = requests.post("http://cer.nju.edu.cn/amserver/UI/Login", data=post_data, cookies=jar, allow_redirects=False)
+    jar = requests.utils.cookiejar_from_dict(login_req.cookies)
+    card_number_req = requests.get('http://cpay.nju.edu.cn/pay/ykt/cardstatus', cookies=jar)
+    card_number = json.loads(card_number_req.content)["data"]["cardno"]
+
+    page_num = 0
+    while True:
+        # 构造POST请求数据
+        post_data = {
+            "beginDate": req_data["startMonth"] + "/01",
+            "endDate": req_data["endMonth"] + "/01",
+            "cardId": card_number,
+            "serialType": 1,
+            "page": page_num,
+        }
+        r1 = requests.post("https://oa.nju.edu.cn/ecard/njuLogin", data=post_data, cookies=jar, allow_redirects=False)
+        r2 = requests.post(
+            "https://oa.nju.edu.cn/ecard/web/" + r1.cookies.get(
+                "LOGIN") + "/1?p_p_id=querydetail&p_p_action=1&p_p_state=maximized&p_p_mode=view&_querydetail_struts_action=%2Fext%2Fecardtransactionquerydetail_result"
+            , data=post_data, cookies=r1.cookies, verify=False)
+        # 解析HTML结果
+        soup = BeautifulSoup(r2.text, "html.parser")
+        trs = soup.find_all(name='tr', attrs={"class": ["tr_1", "tr_2"]})
+        for tr in trs:
+            _soup = BeautifulSoup(str(tr), "html.parser")
+            tds = _soup.find_all(name='td')
+            item = {
+                "transName": tds[0].get_text(strip=True),
+                "termName": tds[1].get_text(strip=True),
+                "transTime": tds[3].get_text(strip=True),
+                "amount": tds[4].get_text(strip=True),
+                "balance": tds[5].get_text(strip=True),
+            }
 
 
 # 从三个接口获取校园卡相关信息
@@ -103,39 +152,14 @@ def oa_record():
     }, ensure_ascii=False)
 
 
-# 废弃接口, 因为仅能显示部分记录
-def record():
-    jar = requests.utils.cookiejar_from_dict(request.cookies)
-    start_date = request.args.get("from")
-    end_date = request.args.get("to")
-    details = []
-    date_num = datetime.datetime.strptime(end_date, '%Y-%m-%d') - datetime.datetime.strptime(start_date, '%Y-%m-%d')
-    daily = [0] * (date_num.days + 1)
-    in_sum = 0
-    out_sum = 0
-    page = 1
-    flag = True
-    while flag:
-        r = requests.get('http://mapp.nju.edu.cn/mobile/getTransList.mo?pageSize=50&page=' + str(page), cookies=jar)
-        item_list = json.loads(r.content, encoding='utf-8')["data"]["items"]
-        for item in item_list:
-            if compare_date(start_date, item["transTime"]) >= 0:
-                if compare_date(end_date, item["transTime"]) <= 0:
-                    details.append(item)
-                    if item["amount"][0] == '-':
-                        out_sum += float(item["amount"][1:])
-                        daily[compare_date(start_date, item["transTime"])] += float(item["amount"][1:])
-                    else:
-                        in_sum += float(item["amount"][1:])
-            else:
-                flag = False
-        page += 1
-    return json.dumps({
-        "details": details,
-        "daily": daily.reverse(),
-        "income": in_sum,
-        "expense": out_sum
-    }, ensure_ascii=False)
+# 获得验证码图片并保存cookie, 验证码对应登录网址为http://cer.nju.edu.cn/amserver/UI/Login
+@cardModule.route('/ver_code', methods=['GET'])
+def cer_code():
+    r = requests.get("http://cer.nju.edu.cn/amserver/verify/image.jsp")
+    res = Response(r.content, mimetype="image/jpg")
+    for key, value in r.cookies.items():
+        res.set_cookie(key, value)
+    return res
 
 
 # 求日期相差的天数

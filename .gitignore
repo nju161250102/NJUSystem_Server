@@ -2,3 +2,5 @@
 /venv
 /static
 /templates
+*.jpg
+*.db
